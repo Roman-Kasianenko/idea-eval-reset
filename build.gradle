@@ -1,20 +1,20 @@
 plugins {
     id 'java'
-    id 'org.jetbrains.intellij' version '0.6.5'
+    id("org.jetbrains.intellij") version "1.17.4"
 }
 
 group 'io.zhile.research.intellij'
-version '2.1.14'
+version '2.4_fix_2025'
 
-sourceCompatibility = 1.7
-targetCompatibility = 1.7
+sourceCompatibility = 17
+targetCompatibility = 17
 
 repositories {
     mavenCentral()
 }
 
 dependencies {
-    testCompile group: 'junit', name: 'junit', version: '4.12'
+    testImplementation group: 'junit', name: 'junit', version: '4.12'
 }
 
 buildPlugin {
@@ -23,12 +23,12 @@ buildPlugin {
 
 // See https://github.com/JetBrains/gradle-intellij-plugin/
 intellij {
-    version "2020.2.4"
-    type "IU"
+    version = "2020.2.4"
+    type = "IU"
 }
 
 patchPluginXml {
-    changeNotes """<pre>
+    changeNotes = """<pre>
 Release v2.1.14
   1. fix minor exceptions
 Release v2.1.13
@@ -81,6 +81,6 @@ Release v1.0.2
   1. compatibility fix
 </pre>"""
 
-    sinceBuild "145.258"
-    untilBuild null
+    sinceBuild = "145.258"
+    untilBuild = "999.*"  // optional, can be removed
 }

@@ -7,11 +7,10 @@ import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.actionSystem.DefaultActionGroup;
 import com.intellij.openapi.project.DumbAware;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.util.IconLoader;
 import com.intellij.openapi.wm.ToolWindow;
 import com.intellij.openapi.wm.ToolWindowAnchor;
-import com.intellij.openapi.wm.ToolWindowEP;
 import com.intellij.openapi.wm.ToolWindowManager;
-import com.intellij.openapi.wm.ex.ToolWindowManagerEx;
 import io.zhile.research.intellij.ier.helper.*;
 import io.zhile.research.intellij.ier.listener.AppActivationListener;
 import io.zhile.research.intellij.ier.listener.AppEventListener;
@@ -54,18 +53,21 @@ public class ResetAction extends AnAction implements DumbAware {
         }
 
         ToolWindow toolWindow = ToolWindowManager.getInstance(project).getToolWindow(Constants.ACTION_NAME);
-        if (null == toolWindow) {
-            ToolWindowEP ep = new ToolWindowEP();
-            ep.id = Constants.ACTION_NAME;
-            ep.anchor = ToolWindowAnchor.BOTTOM.toString();
-            ep.icon = "AllIcons.General.Reset";
-            ep.factoryClass = MainToolWindowFactory.class.getName();
-            ep.setPluginDescriptor(PluginHelper.getPluginDescriptor());
-            ToolWindowManagerEx.getInstanceEx(project).initToolWindow(ep);
 
-            toolWindow = ToolWindowManager.getInstance(project).getToolWindow(Constants.ACTION_NAME);
+        if (toolWindow == null) {
+            // Register the tool window with new API
+            toolWindow = ToolWindowManager.getInstance(project)
+                    .registerToolWindow(Constants.ACTION_NAME, true, ToolWindowAnchor.BOTTOM);
+
+            // Set icon
+            toolWindow.setIcon(IconLoader.getIcon("/icons/reset.png")); // replace with your icon path
+
+            // Set content using your factory
+            MainToolWindowFactory factory = new MainToolWindowFactory();
+            factory.createToolWindowContent(project, toolWindow);
         }
 
+        // Show the tool window
         toolWindow.show(null);
     }
 }

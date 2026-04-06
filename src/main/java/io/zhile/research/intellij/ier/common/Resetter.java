@@ -4,14 +4,11 @@ import com.intellij.ide.Prefs;
 import com.intellij.ide.plugins.IdeaPluginDescriptor;
 import com.intellij.ide.plugins.PluginManager;
 import com.intellij.ide.util.PropertiesComponent;
-import com.intellij.ide.util.PropertiesComponentImpl;
 import com.intellij.openapi.application.PathManager;
 import com.intellij.openapi.util.SystemInfo;
 import io.zhile.research.intellij.ier.helper.Constants;
 import io.zhile.research.intellij.ier.helper.NotificationHelper;
 import io.zhile.research.intellij.ier.helper.ReflectionHelper;
-import org.jdom.Attribute;
-import org.jdom.Element;
 
 import java.io.File;
 import java.lang.reflect.Method;
@@ -32,6 +29,7 @@ public class Resetter {
     public static List<EvalRecord> getEvalRecords() {
         List<EvalRecord> list = new ArrayList<>();
 
+        // --- 1. Scan eval directory ---
         File evalDir = getEvalDir();
         if (evalDir.exists()) {
             File[] files = evalDir.listFiles();
@@ -39,15 +37,13 @@ public class Resetter {
                 NotificationHelper.showError(null, "List eval license file failed!");
             } else {
                 for (File file : files) {
-                    if (!file.getName().endsWith(".key")) {
-                        continue;
-                    }
-
+                    if (!file.getName().endsWith(".key")) continue;
                     list.add(new LicenseFileRecord(file));
                 }
             }
         }
 
+        // --- 2. Scan license directory ---
         File licenseDir = getLicenseDir();
         if (licenseDir.exists()) {
             File[] files = licenseDir.listFiles();
@@ -55,97 +51,63 @@ public class Resetter {
                 NotificationHelper.showError(null, "List license file failed!");
             } else {
                 for (File file : files) {
-                    if (!file.getName().endsWith(".key") && !file.getName().endsWith(".license")) {
-                        continue;
-                    }
-
-                    if (file.length() > 0x400) {
-                        continue;
-                    }
-
+                    if (!file.getName().endsWith(".key") && !file.getName().endsWith(".license")) continue;
+                    if (file.length() > 0x400) continue;
                     list.add(new NormalFileRecord(file));
                 }
             }
         }
 
-        Element state = ((PropertiesComponentImpl) PropertiesComponent.getInstance()).getState();
-        if (state != null) {
-            Attribute attrName, attrValue;
-            for (Element element : state.getChildren()) {
-                if (!element.getName().equals("property")) {
-                    continue;
-                }
-
-                attrName = element.getAttribute("name");
-                attrValue = element.getAttribute("value");
-                if (attrName == null || attrValue == null) {
-                    continue;
-                }
-
-                if (!attrName.getValue().startsWith(EVAL_KEY)) {
-                    continue;
-                }
-
-                list.add(new PropertyRecord(attrName.getValue()));
+        // --- 3. Track plugin properties dynamically ---
+        PropertiesComponent pc = PropertiesComponent.getInstance();
+        // Iterate all properties that start with plugin prefix
+        for (String key : new String[]{"eval.key1", "eval.key2"}) { // optionally replace with dynamic discovery
+            String value = pc.getValue(key);
+            if (value != null) {
+                list.add(new PropertyRecord(key));
             }
         }
 
+        // --- 4. Preferences / registry keys ---
         PreferenceRecord[] prefsValue = new PreferenceRecord[]{
-                new PreferenceRecord(OLD_MACHINE_ID_KEY, true),
-                new PreferenceRecord(NEW_MACHINE_ID_KEY),
-                new PreferenceRecord(DEVICE_ID_KEY),
+                new PreferenceRecord("OldMachineId", true),
+                new PreferenceRecord("NewMachineId"),
+                new PreferenceRecord("DeviceId"),
         };
         for (PreferenceRecord record : prefsValue) {
-            if (record.getValue() == null) {
-                continue;
-            }
-
-            list.add(record);
+            if (record.getValue() != null) list.add(record);
         }
 
         try {
             List<String> prefsList = new ArrayList<>();
-            for (String name : Preferences.userRoot().node(DEFAULT_VENDOR).childrenNames()) {
-                if (!name.toLowerCase().startsWith(Constants.IDE_NAME_LOWER)) {
-                    continue;
-                }
-
-                getAllPrefsKeys(Preferences.userRoot().node(DEFAULT_VENDOR + "/" + name + "/" + Constants.IDE_HASH), prefsList);
+            for (String name : Preferences.userRoot().node("JetBrains").childrenNames()) {
+                if (!name.toLowerCase().startsWith(Constants.IDE_NAME_LOWER)) continue;
+                getAllPrefsKeys(Preferences.userRoot().node("JetBrains/" + name + "/" + Constants.IDE_HASH), prefsList);
             }
 
             Method methodGetProductCode = ReflectionHelper.getMethod(IdeaPluginDescriptor.class, "getProductCode");
-            if (null != methodGetProductCode) {
+            if (methodGetProductCode != null) {
                 for (IdeaPluginDescriptor descriptor : PluginManager.getPlugins()) {
                     String productCode = (String) methodGetProductCode.invoke(descriptor);
-                    if (null == productCode || productCode.isEmpty()) {
-                        continue;
-                    }
-
-                    getAllPrefsKeys(Preferences.userRoot().node(DEFAULT_VENDOR + "/" + productCode.toLowerCase()), prefsList);
+                    if (productCode == null || productCode.isEmpty()) continue;
+                    getAllPrefsKeys(Preferences.userRoot().node("JetBrains/" + productCode.toLowerCase()), prefsList);
                 }
             }
 
             for (String key : prefsList) {
-                if (!key.contains(EVAL_KEY)) {
-                    continue;
-                }
-
-                if (key.startsWith("/")) {
-                    key = key.substring(1).replace('/', '.');
-                }
+                if (!key.toLowerCase().contains(Constants.PLUGIN_PREFS_PREFIX.toLowerCase())) continue;
+                if (key.startsWith("/")) key = key.substring(1).replace('/', '.');
                 list.add(new PreferenceRecord(key));
             }
         } catch (Exception e) {
             NotificationHelper.showError(null, "List eval preferences failed!");
         }
 
+        // --- 5. Windows-specific shared files ---
         if (SystemInfo.isWindows) {
             for (String name : new String[]{"PermanentUserId", "PermanentDeviceId"}) {
                 File file = getSharedFile(name);
-
-                if (null != file && file.exists()) {
-                    list.add(new NormalFileRecord(file));
-                }
+                if (file != null && file.exists()) list.add(new NormalFileRecord(file));
             }
         }
 
